@@ -1,8 +1,9 @@
 {
-  "name": "web-viewer",
+  "name": "web-viewer-app",
   "version": "0.1.0",
   "private": true,
   "dependencies": {
+    "@pdftron/webviewer": "8.9.0",
     "@testing-library/jest-dom": "^5.16.5",
     "@testing-library/react": "^13.4.0",
     "@testing-library/user-event": "^13.5.0",
@@ -15,6 +16,7 @@
     "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
+    "postinstall": "node tools/copy-webviewer-files.js",
     "eject": "react-scripts eject"
   },
   "eslintConfig": {
