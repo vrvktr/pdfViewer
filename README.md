@@ -5,7 +5,9 @@
         Run # npm i  
 
 # Step2:
-    After completing install add the "http://localhost:3000" in webviewer-server/public/lib/ui/configorigin.txt
+    After completing install add the 
+    "http://localhost:3000" 
+    in webviewer-server/public/lib/ui/configorigin.txt
 
     The configorigin.txt will be as shown below
    
