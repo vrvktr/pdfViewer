@@ -19,4 +19,5 @@ http://localhost:3000
 
 
 # Step3:
-    After all the packages installed in both folders run # npm start in both web-viewer and  webviewer-server
+    After all the packages installed in both folders run 
+    # npm start in both web-viewer and  webviewer-server
