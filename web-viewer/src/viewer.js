@@ -3,9 +3,10 @@ import WebViewer from "@pdftron/webviewer";
 import { Button, Col, Container, Row } from 'reactstrap';
 import { hasKeys } from "./common";
 
+let instance;
+
 const Viewer = () => {
   const viewer = useRef(null);
-  let instance;
 
   let customFields = [
     { author: "Custom", color: "blue", draggable: true, editable: false, category: "Utilities", id: "Radiobutton", label: "Radiobutton", name: "Radiobutton", type: "radio" },
@@ -44,32 +45,67 @@ const Viewer = () => {
       console.log('reponse', response)
       instance = response;
       var FitMode = instance.UI.FitMode;
-			instance.UI.setFitMode(FitMode.FitWidth);
+      instance.UI.setFitMode(FitMode.FitWidth);
+
+
+      const { Annotations } = instance.Core;
+
+      Annotations.SelectionModel.setSelectionModelPaddingHandler((annotation) => {
+
+        if (annotation instanceof Annotations.FreeTextAnnotation) {
+
+          return 30;
+
+        }
+
+        return 0;
+      });
 
 
 
-      instance.Annotations.setCustomDrawHandler(instance.Annotations.FreeTextAnnotation, function (ctx, pageMatrix, rotation, options) {
-				const { annotation, originalDraw } = options;
-				console.log("annotation", annotation);
-				// console.log("ctx", ctx);
-				const x = annotation.X;
-				const y = annotation.Y;
-				let width = annotation.getWidth();
-				let height = annotation.getHeight();
+      Annotations.setCustomDrawHandler(Annotations.FreeTextAnnotation,
 
-        options.originalDraw(ctx, pageMatrix, rotation);
-        ctx.save();
-        ctx.lineWidth = 20;
-        ctx.lineJoin = "round";
-        ctx.strokeStyle = "#E2EAFFB3";
-        ctx.strokeRect(x - 10, y - 10, width + 20, height + 20);
-        ctx.fillStyle = '#000000';
-        ctx.translate(x - 10, y - 10);
-        ctx.restore();
+        function (ctx, pageMatrix, rotation, options) {
+
+          options.originalDraw(ctx, pageMatrix, rotation);
+
+          ctx.save();
+
+          ctx.globalCompositeOperation = 'destination-over';
+
+          ctx.moveTo(this.X, this.Y);
+
+          drawBorder(this.X, this.Y, this.Width, this.Height);
+
+          ctx.fillStyle = "green";
+
+          ctx.fillRect(this.X, this.Y, this.Width, this.Height);
+
+          ctx.fillStyle = "blue";
+
+          ctx.fillText('Text Field', this.X, this.Y + (this.Height + 15));
+
+          ctx.restore();
 
 
-			
-			});
+          function drawBorder(xPos, yPos, width, height, thickness = 1) {
+
+            ctx.fillStyle = 'white';
+
+            ctx.fillRect(
+
+              xPos - (thickness),
+
+              yPos - (thickness),
+
+              width + (thickness * 2),
+
+              height + (thickness * 2));
+
+          }
+        });
+
+
 
 
 
@@ -78,79 +114,131 @@ const Viewer = () => {
 
   };
 
-  const addField = async (type, point = {}, data = {}, value = '', flag = {}) => {
-    const { docViewer, Annotations } = instance;
-    const annotManager = docViewer.getAnnotationManager();
-    const doc = docViewer.getDocument();
-    const displayMode = docViewer.getDisplayModeManager().getDisplayMode();
+  // const dem = () => {
+  //   const { Annotations } = instance.Core;
+
+  //   Annotations.SelectionModel.setSelectionModelPaddingHandler((annotation) => {
+
+  //     if (annotation instanceof Annotations.FreeTextAnnotation) {
+
+  //       return 30;
+
+  //     }
+
+  //     return 0;
+  //   });
+
+
+
+  //   Annotations.setCustomDrawHandler(Annotations.FreeTextAnnotation,
+
+  //     function (ctx, pageMatrix, rotation, options) {
+
+  //       options.originalDraw(ctx, pageMatrix, rotation);
+
+  //       ctx.save();
+
+  //       ctx.globalCompositeOperation = 'destination-over';
+
+  //       ctx.moveTo(this.X, this.Y);
+
+  //       drawBorder(this.X, this.Y, this.Width, this.Height);
+
+  //       ctx.fillStyle = "#FFF";
+
+  //       ctx.fillRect(this.X, this.Y, this.Width, this.Height);
+
+  //       ctx.fillStyle = "#000";
+
+  //       ctx.fillText('Text Field', this.X, this.Y + (this.Height + 15));
+
+  //       ctx.restore();
+
+
+  //       function drawBorder(xPos, yPos, width, height, thickness = 1) {
+
+  //         ctx.fillStyle = '#bdbdbd';
+
+  //         ctx.fillRect(
+
+  //           xPos - (thickness),
+
+  //           yPos - (thickness),
+
+  //           width + (thickness * 2),
+
+  //           height + (thickness * 2));
+
+  //       }
+  //     });
+  // }
+
+  const addField = (type, point = {}, name = '', value = '', flag = {}) => {
+    const { documentViewer, Annotations } = instance.Core;
+    const annotationManager = documentViewer.getAnnotationManager();
+    const doc = documentViewer.getDocument();
+    const displayMode = documentViewer.getDisplayModeManager().getDisplayMode();
     const page = displayMode.getSelectedPages(point, point);
     if (!!point.x && page.first == null) {
       return; //don't add field to an invalid page location
     }
-    const page_idx = page.first !== null ? page.first : docViewer.getCurrentPage();
+    const page_idx =
+      page.first !== null ? page.first : documentViewer.getCurrentPage();
     const page_info = doc.getPageInfo(page_idx);
     const page_point = displayMode.windowToPage(point, page_idx);
-    const zoom = docViewer.getZoom();
+    const zoom = documentViewer.getZoomLevel();
 
     var textAnnot = new Annotations.FreeTextAnnotation();
     textAnnot.PageNumber = page_idx;
-    const rotation = docViewer.getCompleteRotation(page_idx) * 90;
+    const rotation = documentViewer.getCompleteRotation(page_idx) * 90;
     textAnnot.Rotation = rotation;
-    let width, height;
     if (rotation === 270 || rotation === 90) {
-      width = type.toUpperCase() === 'CHECKBOX' || type.toUpperCase() === 'RADIO' ? 20 : 50.0 / zoom;
-      height = type.toUpperCase() === 'CHECKBOX' || type.toUpperCase() === 'RADIO' ? 20 : type.toUpperCase() === 'STRIKETHROUGH' ? 2 : 250.0 / zoom;
+      textAnnot.Width = 50.0 / zoom;
+      textAnnot.Height = 250.0 / zoom;
     } else {
-      height = type.toUpperCase() === 'CHECKBOX' || type.toUpperCase() === 'RADIO' ? 20 : type.toUpperCase() === 'STRIKETHROUGH' ? 2 : 50.0 / zoom;
-      width = type.toUpperCase() === 'CHECKBOX' || type.toUpperCase() === 'RADIO' ? 20 : 250.0 / zoom;
+      textAnnot.Width = 250.0 / zoom;
+      textAnnot.Height = 50.0 / zoom;
     }
-    textAnnot.Width = width;
-    textAnnot.Height = height;
-    // textAnnot.NoResize = true;
-    textAnnot.setAutoSizeType('FIXED_HEIGHT');
     textAnnot.X = (page_point.x || page_info.width / 2) - textAnnot.Width / 2;
     textAnnot.Y = (page_point.y || page_info.height / 2) - textAnnot.Height / 2;
 
     textAnnot.setPadding(new Annotations.Rect(0, 0, 0, 0));
-    let category = hasKeys(data) && hasKeys(data.category) ? data.category : ''
     textAnnot.custom = {
       type,
       value,
       flag,
-      name: data.name,
-      label: data.label,
-      author: hasKeys(data.author) ? data.author : 'Guest',
-      category,
-      token: data.token,
-      editMode: false,
+      name: `new`,
     };
-    let contentName = data.name || "";
-    let content = `${contentName}\n\t${category}`
-    textAnnot.setContents(content);
-    textAnnot.disableRotationControl();
-    textAnnot.FontSize = '' + 15.0 / zoom + 'px';
-    textAnnot.FillColor = new Annotations.Color(255, 255, 255, 1);
-    textAnnot.TextColor = new Annotations.Color(18, 18, 20);
+
+    // set the type of annot
+    textAnnot.setContents(textAnnot.custom.name);
+    textAnnot.FontSize = '' + 20.0 / zoom + 'px';
+    // textAnnot.FillColor = new Annotations.Color(211, 211, 211, 0.5);
+    // textAnnot.TextColor = new Annotations.Color(0, 165, 228);
     textAnnot.StrokeThickness = 1;
-    textAnnot.StrokeColor = new Annotations.Color(197, 197, 199);
+    textAnnot.StrokeColor = new Annotations.Color(0, 165, 228);
     textAnnot.TextAlign = 'left';
-   
-    let namelength = contentName.length + 1;
 
+    textAnnot.setRichTextStyle({
+      0: {
+        'font-weight': 'bold'
+      }
+    })
 
-    textAnnot.Author = annotManager.getCurrentUser();
+    textAnnot.Author = annotationManager.getCurrentUser();
 
-    annotManager.deselectAllAnnotations();
-    annotManager.addAnnotation(textAnnot, true);
-    annotManager.redrawAnnotation(textAnnot);
-    // annotManager.selectAnnotation(textAnnot);
+    annotationManager.deselectAllAnnotations();
+    annotationManager.addAnnotation(textAnnot, true);
+    annotationManager.redrawAnnotation(textAnnot);
+    annotationManager.selectAnnotation(textAnnot);
   };
+
 
   const insertAnnot = async (res) => {
     // await deleteAllAnnotation();
     const { docViewer, Annotations } = instance;
     const annotManager = docViewer.getAnnotationManager();
-    const zoom = docViewer.getZoom();
+    const zoom = docViewer.getZoomLevel();
     const totalPages = docViewer.getPageCount();
     let { type, xAxis, yAxis, pageNumber, name, contents, label, token } = res;
     let category = res.category || ""
@@ -178,7 +266,7 @@ const Viewer = () => {
         token,
         editMode: false,
       };
-      let content = `\t${name}\n\t${category}`
+      let content = name
       let namelength = name.length + 1;
 
       textAnnot.setContents(content);
@@ -189,10 +277,9 @@ const Viewer = () => {
       textAnnot.StrokeThickness = 1;
       textAnnot.StrokeColor = new Annotations.Color(197, 197, 199);
       textAnnot.TextAlign = 'left';
-      textAnnot.AutoSizeTypes = 'FIXED_HEIGHT';
 
       textAnnot.Author = annotManager.getCurrentUser();
-      
+
 
       annotManager.deselectAllAnnotations();
       annotManager.addAnnotation(textAnnot, true);
@@ -204,22 +291,51 @@ const Viewer = () => {
   const handleAnnot = (action) => {
     let x = customFields[0];
     let y = customFields[1];
-    const { docViewer } = instance;
-    const scrollElement = docViewer.getScrollViewElement();
-    const scrollLeft = scrollElement.scrollLeft || 0;
-    const scrollTop = scrollElement.scrollTop || 0;
-    const scrollOffset = 200;
-    const dropAxis = { x: scrollLeft + scrollOffset, y: scrollTop + scrollOffset };
-    y.xAxis = dropAxis.x;
-    y.yAxis = dropAxis.y;
+    let point = viewPointPage();
+    y.xAxis = point.x;
+    y.yAxis = point.y;
+    y.pageNumber = 1;
     switch (action) {
       case 'add':
-        addField(x.type, dropAxis, x)
+        addField(x.type, point, x)
         break;
       case 'insert':
         insertAnnot(y)
         break;
     }
+  }
+
+
+
+  const viewPointPage = () => {
+    const { docViewer, annotManager, Annotations } = instance;
+    const viewerElement = docViewer.getScrollViewElement();
+
+    const top = viewerElement.scrollTop + viewerElement.offsetTop;
+    const bottom = top + viewerElement.offsetHeight;
+    const left = viewerElement.scrollLeft + viewerElement.offsetLeft;
+    const right = left + viewerElement.offsetWidth;
+
+    const windowCoordinateCenter = {
+      x: (left + right) / 2,
+      y: (top + bottom) / 2
+    };
+
+    const displayMode = docViewer.getDisplayModeManager().getDisplayMode();
+
+    const pageNumber = getPageNumber(displayMode, windowCoordinateCenter);
+
+    const pageCoordinates = displayMode.windowToPage(windowCoordinateCenter, pageNumber);
+
+    return pageCoordinates;
+  }
+
+  const getPageNumber = (displayMode, windowCoordinates) => {
+    const { docViewer, annotManager, Annotations } = instance;
+    const page = displayMode.getSelectedPages(windowCoordinates, windowCoordinates);
+    const clickedPage = (page.first !== null) ? page.first : docViewer.getCurrentPage();
+    return clickedPage;
+
   }
 
 
