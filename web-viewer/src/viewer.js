@@ -50,6 +50,14 @@ const Viewer = () => {
 
       const { Annotations } = instance.Core;
 
+      instance.annotManager.on('annotationSelected',(annotations,action)=>{
+        if(action==='selected'){
+          instance.annotManager.trigger('annotationDoubleClicked')
+        }
+      })
+
+
+
       Annotations.SelectionModel.setSelectionModelPaddingHandler((annotation) => {
 
         if (annotation instanceof Annotations.FreeTextAnnotation) {
@@ -77,11 +85,11 @@ const Viewer = () => {
 
           drawBorder(this.X, this.Y, this.Width, this.Height);
 
-          ctx.fillStyle = "green";
+          ctx.fillStyle = "#FFF";
 
           ctx.fillRect(this.X, this.Y, this.Width, this.Height);
 
-          ctx.fillStyle = "blue";
+          ctx.fillStyle = "#000";
 
           ctx.fillText('Text Field', this.X, this.Y + (this.Height + 15));
 
@@ -90,7 +98,7 @@ const Viewer = () => {
 
           function drawBorder(xPos, yPos, width, height, thickness = 1) {
 
-            ctx.fillStyle = 'white';
+            ctx.fillStyle = '#bdbdbd';
 
             ctx.fillRect(
 
@@ -104,11 +112,6 @@ const Viewer = () => {
 
           }
         });
-
-
-
-
-
 
     });
 
@@ -272,10 +275,10 @@ const Viewer = () => {
       textAnnot.setContents(content);
       textAnnot.disableRotationControl();
       textAnnot.FontSize = '' + 15.0 / zoom + 'px';
-      textAnnot.FillColor = new Annotations.Color(255, 255, 255, 1);
+      // textAnnot.FillColor = new Annotations.Color(255, 255, 255, 1);
       textAnnot.TextColor = new Annotations.Color(18, 18, 20);
       textAnnot.StrokeThickness = 1;
-      textAnnot.StrokeColor = new Annotations.Color(197, 197, 199);
+      // textAnnot.StrokeColor = new Annotations.Color(197, 197, 199);
       textAnnot.TextAlign = 'left';
 
       textAnnot.Author = annotManager.getCurrentUser();
@@ -302,10 +305,28 @@ const Viewer = () => {
       case 'insert':
         insertAnnot(y)
         break;
+      case 'demo':
+        demo();
+        break;
     }
   }
 
+  const demo = () => {
+    const { Annotations, annotationManager, documentViewer } = instance.Core;
+    const freeText = new Annotations.FreeTextAnnotation();
+    freeText.PageNumber = 1;
+    freeText.X = 150;
+    freeText.Y = 200;
+    freeText.Width = 150;
+    freeText.Height = 50;
+    freeText.setPadding(new Annotations.Rect(0, 0, 0, 0));
+    freeText.setContents('My Text');
+    freeText.FillColor = new Annotations.Color(0, 255, 255);
+    freeText.FontSize = '16pt';
 
+    annotationManager.addAnnotation(freeText, { autoFocus: false });
+    annotationManager.redrawAnnotation(freeText);
+  }
 
   const viewPointPage = () => {
     const { docViewer, annotManager, Annotations } = instance;
@@ -343,8 +364,9 @@ const Viewer = () => {
     <Container>
       <Row>
         <Col xs='12'>
-          <Button color="primary" size="lg" onClick={() => handleAnnot('insert')}>Insert Annot</Button>
-          <Button color="secondary" size="lg" onClick={() => handleAnnot('add')}>Add Field</Button>
+          {/* <Button color="primary" size="lg" onClick={() => handleAnnot('insert')}>Insert Annot</Button>
+          <Button color="secondary" size="lg" onClick={() => handleAnnot('add')}>Add Field</Button> */}
+          <Button color="secondary" size="lg" onClick={() => handleAnnot('demo')}>Demo</Button>
         </Col>
         <Col xs='12'>
           <div className="webviewer" ref={viewer} style={{ height: "100vh" }}></div>
