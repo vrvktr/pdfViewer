@@ -45,77 +45,113 @@ const Viewer = () => {
       console.log('reponse', response)
       instance = response;
       var FitMode = instance.UI.FitMode;
+      let selectedAnnotation = null;
+
+      let currentAnnot = null;
+      let signedAnnot = null;
+      let existingSignature = null;
+
       instance.UI.setFitMode(FitMode.FitWidth);
 
 
-      const { Annotations } = instance.Core;
+      const { Annotations, annotationManager } = instance.Core;
 
-      instance.annotManager.on('annotationSelected',(annotations,action)=>{
-        if(action==='selected'){
-          instance.annotManager.trigger('annotationDoubleClicked')
+
+      instance.annotationPopup.add([{
+        type: 'actionButton',
+        label: 'Edit',
+        dataElement: 'editField',
+        onClick: () => changeSignature(selectedAnnotation)
+      }])
+
+      annotationManager.addEventListener('annotationSelected', (annotations, action) => {
+        if (action === 'selected') {
+          let annot = annotations[0];
+          if (hasKeys(annot) && (annot.ToolName === 'AnnotationCreateFreeHand' || annot.ToolName === 'AnnotationCreateRubberStamp') && annot.Subject === 'Signature') {
+            selectedAnnotation = annotations;
+          }
         }
       })
+      const signatureTool = instance.Core.documentViewer.getTool('AnnotationCreateSignature');
 
-
-
-      Annotations.SelectionModel.setSelectionModelPaddingHandler((annotation) => {
-
-        if (annotation instanceof Annotations.FreeTextAnnotation) {
-
-          return 30;
-
+      signatureTool.addEventListener('locationSelected', async (options, annotation) => {
+        const savedSignature = signatureTool.getSavedSignatures()[0];
+        if (savedSignature) {
+          await signatureTool.setSignature(savedSignature);
+          await signatureTool.addSignature();
+          instance.UI.closeElements(['signatureModal']);
         }
+      });
 
-        return 0;
+      signatureTool.addEventListener('signatureSaved', (newAnnot) => {
+        setTimeout(async () => {
+          signatureTool.switchOut(); const savedSignature = signatureTool.getSavedSignatures(); if (currentAnnot != null) {
+            let currentSignedAnnotation = annotationManager.getAnnotationsList().filter(a => a instanceof instance.Annotations.SignatureWidgetAnnotation && !a.getAssociatedSignatureAnnotation() && a.Id === currentAnnot.Id); let signedAnnotation = []
+            if (signedAnnot.length > 0) { signedAnnotation = signedAnnot.filter((a) => a => a instanceof instance.Annotations.SignatureWidgetAnnotation && !a.getAssociatedSignatureAnnotation() && a.Id !== currentAnnot.Id); } if (signedAnnotation.length > 0) { currentSignedAnnotation = [...currentSignedAnnotation, ...signedAnnotation] }
+            currentSignedAnnotation.forEach(widget => {
+              const copiedAnnotation = annotationManager.getAnnotationCopy(savedSignature[0]); widget.setAssociatedSignatureAnnotation(copiedAnnotation); copiedAnnotation.PageNumber = widget.PageNumber; copiedAnnotation.X = widget.X; copiedAnnotation.Y = widget.Y; copiedAnnotation.Height = widget.Height; if (copiedAnnotation.Width > widget.Width) { copiedAnnotation.Width = existingSignature != null ? existingSignature.width : widget.Width; } annotationManager.addAnnotation(copiedAnnotation);
+            });
+            currentAnnot = null; signedAnnot = null; existingSignature = null; instance.UI.setToolMode('AnnotationEdit');
+          }
+        }, 100)
       });
 
 
 
-      Annotations.setCustomDrawHandler(Annotations.FreeTextAnnotation,
-
-        function (ctx, pageMatrix, rotation, options) {
-
-          options.originalDraw(ctx, pageMatrix, rotation);
-
-          ctx.save();
-
-          ctx.globalCompositeOperation = 'destination-over';
-
-          ctx.moveTo(this.X, this.Y);
-
-          drawBorder(this.X, this.Y, this.Width, this.Height);
-
-          ctx.fillStyle = "#FFF";
-
-          ctx.fillRect(this.X, this.Y, this.Width, this.Height);
-
-          ctx.fillStyle = "#000";
-
-          ctx.fillText('Text Field', this.X, this.Y + (this.Height + 15));
-
-          ctx.restore();
+      const changeSignature = async (selectAnnotations) => {
+        const allAnnotation = annotationManager.getAnnotationsList();
+        const currentSignatureAnnotation = allAnnotation.find(a => a instanceof instance.Annotations.SignatureWidgetAnnotation && hasKeys(a.getAssociatedSignatureAnnotation()) && a.getAssociatedSignatureAnnotation().Id === selectAnnotations[0].Id)
+        currentAnnot = currentSignatureAnnotation;
+        const signatureCount = signatureTool.getSavedSignatures().length;
+        const savedSignature = currentSignatureAnnotation.getAssociatedSignatureAnnotation();
+        existingSignature = { height: savedSignature.Height, width: savedSignature.Width };
+        for (let i = signatureCount - 1; i >= 0; i--) { signatureTool.deleteSavedSignature(i); }
+        handleDeleteAnnotation(selectAnnotations, 'delete')
+        const signatureWidgets = instance.annotManager.getAnnotationsList().filter((annot) => annot instanceof instance.Annotations.SignatureWidgetAnnotation && hasKeys(annot.getAssociatedSignatureAnnotation()))
+        //deleting all the signeed fields;
+        signedAnnot = signatureWidgets; signatureWidgets.forEach((annot) => { handleDeleteAnnotation([annot.getAssociatedSignatureAnnotation()], 'delete') })
+        signatureTool.clearSignatureCanvas(); await signatureTool.setSignature(null); await signatureTool.addSignature();
+        // instance.UI.openElement('signatureModal')        
+        signatureTool.trigger('locationSelected', [{ pageNumber: currentAnnot.PageNumber, x: currentAnnot.x + 10, y: currentAnnot.y + 10 }, currentSignatureAnnotation]);
+      }
 
 
-          function drawBorder(xPos, yPos, width, height, thickness = 1) {
-
-            ctx.fillStyle = '#bdbdbd';
-
-            ctx.fillRect(
-
-              xPos - (thickness),
-
-              yPos - (thickness),
-
-              width + (thickness * 2),
-
-              height + (thickness * 2));
-
-          }
-        });
 
     });
 
   };
+
+  const handleDeleteAnnotation = (annotations, action) => {
+    const { Annotations, annotationManager } = instance.Core;
+    const allAnnotation = annotationManager.getAnnotationsList();
+    if (hasKeys(annotations) && action === 'delete') {
+      let annotationIds = [];
+      allAnnotation.map((annot) => {
+        annotationIds.push(annot.Id)
+
+      })
+      let annotsToDelete = []
+      Promise.all(allAnnotation.map((annot) => {
+        const id = annot.Id;
+        if (annotationIds.includes(id)) {
+          annotsToDelete.push(annot)
+          const signatureWidgets = instance.annotManager.getAnnotationsList().find((annot) =>
+            annot instanceof instance.Annotations.SignatureWidgetAnnotation &&
+            annot.getAssociatedSignatureAnnotation() && annot.getAssociatedSignatureAnnotation().Id === id)
+          if (signatureWidgets) {
+            signatureWidgets.setAssociatedSignatureAnnotation(null);
+          }
+
+        }
+      }))
+
+      if (hasKeys(annotsToDelete)) {
+        instance.annotManager.deleteAnnotations(annotsToDelete);
+      }
+
+    }
+  }
+
 
   // const dem = () => {
   //   const { Annotations } = instance.Core;
@@ -358,15 +394,166 @@ const Viewer = () => {
     return clickedPage;
 
   }
+  const newFun = () => {
+    const { documentViewer, annotationManager, Annotations } = instance.Core;
+
+    var textAnnot = new Annotations.FreeTextAnnotation();
+    textAnnot.PageNumber = 1;
+    textAnnot.Width = 225;
+    textAnnot.Height = 49;
+    textAnnot.X = 100
+    textAnnot.Y = 100;
+
+    textAnnot.IsClickableOutsideRect = true;
+    textAnnot.setPadding(new Annotations.Rect(0, 0, 0, 0));
+    var customData = {
+      value: 'Type your text here',
+      isDefault: true
+    };
+    textAnnot.setCustomData(JSON.stringify(customData));
+    textAnnot.setContents('');
+    textAnnot.setAutoSizeType('AUTO')
+    textAnnot.custom = {
+      type: 'SIGNATURE',
+    };
+
+    annotationManager.addAnnotation(textAnnot);
+    annotationManager.redrawAnnotation(textAnnot);
+  }
+
+  const applyFields = async () => {
+    const { Annotations, documentViewer } = instance.Core;
+    const annotationManager = documentViewer.getAnnotationManager();
+    const fieldManager = annotationManager.getFieldManager();
+    const annotationsList = annotationManager.getAnnotationsList();
+    const annotsToDelete = [];
+    const annotsToDraw = [];
+
+    await Promise.all(
+      annotationsList.map(async (annot, index) => {
+        let inputAnnot;
+        let field;
+
+        if (typeof annot.custom !== 'undefined') {
+          // create a form field based on the type of annotation
+          if (annot.custom.type === 'TEXT') {
+            field = new Annotations.Forms.Field(
+              annot.getContents() + Date.now() + index,
+              {
+                type: 'Tx',
+                value: annot.custom.value,
+              },
+            );
+            inputAnnot = new Annotations.TextWidgetAnnotation(field);
+          } else if (annot.custom.type === 'SIGNATURE') {
+            field = new Annotations.Forms.Field(
+              annot.getContents() + Date.now() + index,
+              {
+                type: 'Sig',
+              },
+            );
+            inputAnnot = new Annotations.SignatureWidgetAnnotation(field, {
+              appearance: '_DEFAULT',
+              appearances: {
+                _DEFAULT: {
+                  Normal: {
+                    data:
+                      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAAYdEVYdFNvZnR3YXJlAHBhaW50Lm5ldCA0LjEuMWMqnEsAAAANSURBVBhXY/j//z8DAAj8Av6IXwbgAAAAAElFTkSuQmCC',
+                    offset: {
+                      x: 100,
+                      y: 100,
+                    },
+                  },
+                },
+              },
+            });
+          } else if (annot.custom.type === 'DATE') {
+            field = new Annotations.Forms.Field(
+              annot.getContents() + Date.now() + index,
+              {
+                type: 'Tx',
+                value: 'm-d-yyyy',
+                // Actions need to be added for DatePickerWidgetAnnotation to recognize this field.
+                actions: {
+                  F: [
+                    {
+                      name: 'JavaScript',
+                      // You can customize the date format here between the two double-quotation marks
+                      // or leave this blank to use the default format
+                      javascript: 'AFDate_FormatEx("mmm d, yyyy");',
+                    },
+                  ],
+                  K: [
+                    {
+                      name: 'JavaScript',
+                      // You can customize the date format here between the two double-quotation marks
+                      // or leave this blank to use the default format
+                      javascript: 'AFDate_FormatEx("mmm d, yyyy");',
+                    },
+                  ],
+                },
+              },
+            );
+
+            inputAnnot = new Annotations.DatePickerWidgetAnnotation(field);
+          } else {
+            // exit early for other annotations
+            annotationManager.deleteAnnotation(annot, false, true); // prevent duplicates when importing xfdf
+            return;
+          }
+        } else {
+          // exit early for other annotations
+          return;
+        }
+
+        // set position
+        inputAnnot.PageNumber = annot.getPageNumber();
+        inputAnnot.X = annot.getX();
+        inputAnnot.Y = annot.getY();
+        inputAnnot.rotation = annot.Rotation;
+        if (annot.Rotation === 0 || annot.Rotation === 180) {
+          inputAnnot.Width = annot.getWidth();
+          inputAnnot.Height = annot.getHeight();
+        } else {
+          inputAnnot.Width = annot.getHeight();
+          inputAnnot.Height = annot.getWidth();
+        }
+
+        // delete original annotation
+        annotsToDelete.push(annot);
+
+        // customize styles of the form field
+        Annotations.WidgetAnnotation.getCustomStyles = function (widget) {
+          if (widget instanceof Annotations.SignatureWidgetAnnotation) {
+            return {
+              border: '1px solid #a5c7ff',
+            };
+          }
+        };
+        Annotations.WidgetAnnotation.getCustomStyles(inputAnnot);
+
+        // draw the annotation the viewer
+        annotationManager.addAnnotation(inputAnnot);
+        fieldManager.addField(field);
+        annotsToDraw.push(inputAnnot);
+      }),
+    );
+
+    // delete old annotations
+    annotationManager.deleteAnnotations(annotsToDelete, null, true);
+
+    // refresh viewer
+    await annotationManager.drawAnnotationsFromList(annotsToDraw);
+  };
+
 
 
   return (
     <Container>
       <Row>
         <Col xs='12'>
-          {/* <Button color="primary" size="lg" onClick={() => handleAnnot('insert')}>Insert Annot</Button>
-          <Button color="secondary" size="lg" onClick={() => handleAnnot('add')}>Add Field</Button> */}
-          <Button color="secondary" size="lg" onClick={() => handleAnnot('demo')}>Demo</Button>
+          <Button color="secondary" size="lg" onClick={() => applyFields()}>Apply Fields</Button>
+          <Button color="secondary" size="lg" onClick={() => newFun()}>Create Sign Fields</Button>
         </Col>
         <Col xs='12'>
           <div className="webviewer" ref={viewer} style={{ height: "100vh" }}></div>
