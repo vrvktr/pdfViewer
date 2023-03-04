@@ -404,7 +404,6 @@ const Viewer = () => {
     textAnnot.X = 100
     textAnnot.Y = 100;
 
-    textAnnot.IsClickableOutsideRect = true;
     textAnnot.setPadding(new Annotations.Rect(0, 0, 0, 0));
     var customData = {
       value: 'Type your text here',
@@ -416,7 +415,7 @@ const Viewer = () => {
     textAnnot.custom = {
       type: 'SIGNATURE',
     };
-
+    console.log('textAnnot', textAnnot);
     annotationManager.addAnnotation(textAnnot);
     annotationManager.redrawAnnotation(textAnnot);
   }
