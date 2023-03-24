@@ -27,17 +27,17 @@ const Viewer = () => {
       config: "./config.js",
       initialDoc: "https://pdftron.s3.amazonaws.com/downloads/pl/webviewer-demo.pdf",
       disabledElements: [
-        'ribbons',
-        'toggleNotesButton',
-        'searchButton',
-        'menuButton',
-        'rubberStampToolGroupButton',
-        'stampToolGroupButton',
-        'fileAttachmentToolGroupButton',
-        'calloutToolGroupButton',
-        'undo',
-        'redo',
-        'eraserToolButton', 'header'
+        // 'ribbons',
+        // 'toggleNotesButton',
+        // 'searchButton',
+        // 'menuButton',
+        // 'rubberStampToolGroupButton',
+        // 'stampToolGroupButton',
+        // 'fileAttachmentToolGroupButton',
+        // 'calloutToolGroupButton',
+        // 'undo',
+        // 'redo',
+        // 'eraserToolButton', 'header'
       ],
 
     };
@@ -51,8 +51,9 @@ const Viewer = () => {
       let signedAnnot = null;
       let existingSignature = null;
 
-      instance.UI.setFitMode(FitMode.FitWidth);
-
+      // instance.UI.setFitMode(FitMode.FitWidth);
+      const { Feature } = instance.UI;
+      instance.UI.enableFeatures([Feature.FilePicker]);
 
       const { Annotations, annotationManager } = instance.Core;
 
@@ -63,6 +64,52 @@ const Viewer = () => {
         dataElement: 'editField',
         onClick: () => changeSignature(selectedAnnotation)
       }])
+
+
+
+
+      const allTools = Object.values(instance.docViewer.getToolModeMap());
+      for (const tool of allTools) {
+        if (tool instanceof instance.Tools.AnnotationSelectTool) {
+          tool.enableImmediateActionOnAnnotationSelection();
+        }
+      }
+
+
+      instance.Annotations.setCustomDrawHandler(instance.Annotations.FreeTextAnnotation, function (ctx, pageMatrix, rotation, options) {
+        const { annotation, originalDraw } = options
+        const x = annotation.X;
+        const y = annotation.Y;
+        const width = annotation.getWidth();
+        const height = annotation.getHeight();
+        let { name, label, value } = annotation.custom;
+        label = label ? label : "new";
+        name = name ? name : "new";
+        value = value ? value : "new";
+        const annot = options.annotation;
+
+        // Draw annotation ID overtop the rectangle
+        ctx.beginPath();
+        annotation.setStyles(ctx, pageMatrix)
+        ctx.lineWidth = 2;
+        ctx.save();
+        ctx.translate(x, y)
+        ctx.beginPath();
+        ctx.strokeStyle = "#091C3F";
+        ctx.roundRect(0, 0, width, height, 2)
+        ctx.stroke()
+        ctx.fill()
+        ctx.closePath()
+        ctx.fillText(annotation.Id, 0, height + 8)
+        ctx.restore()
+        ctx.clip()
+
+      })
+
+      instance.Annotations.SelectionModel.setSelectionModelPaddingHandler((annotation) => {
+        return 20;
+      })
+
 
       annotationManager.addEventListener('annotationSelected', (annotations, action) => {
         if (action === 'selected') {
@@ -274,6 +321,7 @@ const Viewer = () => {
 
 
   const insertAnnot = async (res) => {
+    console.log(res);
     // await deleteAllAnnotation();
     const { docViewer, Annotations } = instance;
     const annotManager = docViewer.getAnnotationManager();
@@ -349,16 +397,29 @@ const Viewer = () => {
 
   const demo = () => {
     const { Annotations, annotationManager, documentViewer } = instance.Core;
+    const zoom = documentViewer.getZoomLevel();
+
     const freeText = new Annotations.FreeTextAnnotation();
     freeText.PageNumber = 1;
     freeText.X = 150;
     freeText.Y = 200;
-    freeText.Width = 150;
-    freeText.Height = 50;
+    const rotation = documentViewer.getCompleteRotation(1) * 90;
+    freeText.Rotation = rotation;
+    if (rotation === 270 || rotation === 90) {
+      freeText.Width = 50.0 / zoom;
+      freeText.Height = 250.0 / zoom;
+    } else {
+      freeText.Width = 250.0 / zoom;
+      freeText.Height = 50.0 / zoom;
+    }
     freeText.setPadding(new Annotations.Rect(0, 0, 0, 0));
     freeText.setContents('My Text');
+    freeText.setCustomData('trn-annot-clickable-oustside-rect', 'true');
     freeText.FillColor = new Annotations.Color(0, 255, 255);
     freeText.FontSize = '16pt';
+    freeText.custom = {
+      type: "RADIO"
+    }
 
     annotationManager.addAnnotation(freeText, { autoFocus: false });
     annotationManager.redrawAnnotation(freeText);
@@ -413,7 +474,7 @@ const Viewer = () => {
     textAnnot.setContents('');
     textAnnot.setAutoSizeType('AUTO')
     textAnnot.custom = {
-      type: 'SIGNATURE',
+      type: 'RADIO',
     };
     console.log('textAnnot', textAnnot);
     annotationManager.addAnnotation(textAnnot);
@@ -495,6 +556,27 @@ const Viewer = () => {
             );
 
             inputAnnot = new Annotations.DatePickerWidgetAnnotation(field);
+          } else if (annot.custom.type === 'RADIO') {
+            const flags = new Annotations.WidgetFlags();
+            flags.set('ReadOnly', true)
+            field = new Annotations.Forms.Field(
+              annot.getContents() + Date.now() + index,
+              {
+                type: 'Btn',
+                value: "Yes",
+                flags
+              },
+            );
+            inputAnnot = new Annotations.RadioButtonWidgetAnnotation(field, {
+              appearance: 'Off',
+              appearances: {
+                Off: {},
+                Yes: {},
+              },
+              captions: {
+                Normal: ""
+              }
+            });
           } else {
             // exit early for other annotations
             annotationManager.deleteAnnotation(annot, false, true); // prevent duplicates when importing xfdf
@@ -528,6 +610,13 @@ const Viewer = () => {
               border: '1px solid #a5c7ff',
             };
           }
+          if (widget instanceof Annotations.RadioButtonWidgetAnnotation) {
+            return {
+              border: '2px solid #091C3F',
+              backgroundColor: '#FFFFFF'
+
+            }
+          }
         };
         Annotations.WidgetAnnotation.getCustomStyles(inputAnnot);
 
@@ -551,8 +640,10 @@ const Viewer = () => {
     <Container>
       <Row>
         <Col xs='12'>
-          <Button color="secondary" size="lg" onClick={() => applyFields()}>Apply Fields</Button>
+          {/* <Button color="secondary" size="lg" onClick={() => applyFields()}>Apply Fields</Button>
           <Button color="secondary" size="lg" onClick={() => newFun()}>Create Sign Fields</Button>
+          <Button color="primary" size="lg" onClick={() => handleAnnot('insert')}>HandleAnnot</Button> */}
+          <Button color="primary" size="lg" onClick={() => demo()}>demo</Button>
         </Col>
         <Col xs='12'>
           <div className="webviewer" ref={viewer} style={{ height: "100vh" }}></div>
